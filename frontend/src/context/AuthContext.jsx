@@ -98,6 +98,23 @@ export function AuthProvider({ children }) {
     return currentUser;
   }, []);
 
+  const loginWithGoogle = useCallback(async (credential) => {
+    const data = await api.post("/auth/google", { credential });
+    const token = data?.token || data?.data?.token;
+    const currentUser = data?.user || data?.data?.user;
+
+    if (!token || !currentUser) {
+      throw new Error(
+        "The server response is missing the login token or user details."
+      );
+    }
+
+    saveSession(token, currentUser);
+    setUser(currentUser);
+
+    return currentUser;
+  }, []);
+
   const register = useCallback(async (details) => {
     const data = await api.post("/auth/register", details);
 
@@ -141,6 +158,7 @@ export function AuthProvider({ children }) {
     loading,
     isAuthenticated: Boolean(user),
     login,
+    loginWithGoogle,
     register,
     startDemo,
     logout,

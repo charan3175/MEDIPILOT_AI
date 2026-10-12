@@ -183,15 +183,17 @@ const welcomeQuotes = [
   { quote: "Your health story deserves context, care, and your voice.", source: "A note from MEDIPILOT AI" },
 ];
 
-function AuthScreen({ onLogin, onRegister, onForgotPassword, onResetPassword, onStartDemo }) {
+function AuthScreen({ onLogin, onGoogleLogin, onRegister, onForgotPassword, onResetPassword, onStartDemo }) {
   const [resetToken, setResetToken] = useState(() => new URLSearchParams(window.location.search).get("resetToken") || "");
   const [authMode, setAuthMode] = useState(() => resetToken ? "reset" : "");
   const [slide, setSlide] = useState(0);
   const [quote, setQuote] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const googleButtonRef = useRef(null);
   const registering = authMode === "register";
 
   useEffect(() => {
@@ -218,6 +220,85 @@ function AuthScreen({ onLogin, onRegister, onForgotPassword, onResetPassword, on
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [authMode]);
+
+  useEffect(() => {
+    if (authMode !== "login" || !import.meta.env.VITE_GOOGLE_CLIENT_ID) {
+      setGoogleReady(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+    function renderGoogleButton() {
+      const google = window.google;
+      if (
+        cancelled ||
+        !googleButtonRef.current ||
+        !google?.accounts?.id
+      ) {
+        return;
+      }
+
+      google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async ({ credential }) => {
+          if (!credential) {
+            setError("Google sign-in did not return a credential. Please try again.");
+            return;
+          }
+
+          setError("");
+          setBusy(true);
+          try {
+            await onGoogleLogin(credential);
+          } catch (requestError) {
+            setError(messageFrom(requestError));
+          } finally {
+            setBusy(false);
+          }
+        },
+      });
+      google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        shape: "rectangular",
+        width: 380,
+      });
+      setGoogleReady(true);
+    }
+
+    let script = document.querySelector(
+      'script[src="https://accounts.google.com/gsi/client"]'
+    );
+    if (window.google?.accounts?.id) {
+      renderGoogleButton();
+    } else if (script) {
+      script.addEventListener("load", renderGoogleButton);
+      script.addEventListener("error", handleScriptError);
+    } else {
+      script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.addEventListener("load", renderGoogleButton);
+      script.addEventListener("error", handleScriptError);
+      document.head.appendChild(script);
+    }
+
+    function handleScriptError() {
+      if (!cancelled) {
+        setError("Google sign-in could not load. Check your connection and try again.");
+      }
+    }
+
+    return () => {
+      cancelled = true;
+      script?.removeEventListener("load", renderGoogleButton);
+      script?.removeEventListener("error", handleScriptError);
+    };
+  }, [authMode, onGoogleLogin]);
 
   function openAuth(mode) {
     setAuthMode(mode);
@@ -410,6 +491,10 @@ function AuthScreen({ onLogin, onRegister, onForgotPassword, onResetPassword, on
               {success && <p className="form-alert success" role="status">{success}</p>}
               <button className="welcome-register auth-submit" disabled={busy}>{busy ? "Please wait…" : registering ? "Create patient account" : "Sign in securely"}<ArrowRight size={15} /></button>
             </form>
+              {!registering && import.meta.env.VITE_GOOGLE_CLIENT_ID && <div className="google-signin">
+                <span>or continue with</span>
+                <div ref={googleButtonRef} className="google-signin-button" aria-busy={!googleReady || busy} />
+              </div>}
               {!registering && <button className="auth-modal-switch" onClick={() => { setAuthMode("guest"); setError(""); setSuccess(""); }}>Continue as guest with name only</button>}
               <button className="auth-modal-switch" onClick={() => openAuth(registering ? "login" : "register")}>{registering ? "Already have an account? Sign in" : "New to MEDIPILOT AI? Create an account"}</button>
           </>}
@@ -1723,7 +1808,7 @@ function PublicSharedRecords({ token }) {
 }
 
 export default function PatientWorkspace() {
-  const { user, loading: authLoading, login, register, startDemo, logout } = useAuth();
+  const { user, loading: authLoading, login, loginWithGoogle, register, startDemo, logout } = useAuth();
   const [active, setActive] = useState(() => pageFromHash(window.location.hash));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(
@@ -2095,6 +2180,7 @@ export default function PatientWorkspace() {
   if (authLoading) return <main className="auth-loading"><span className="loading-mark"><HeartPulse size={22} /></span><p>Opening your private health workspace…</p></main>;
   if (!user) return <AuthScreen
     onLogin={login}
+    onGoogleLogin={loginWithGoogle}
     onRegister={register}
     onStartDemo={(name) => {
       localStorage.removeItem(DEMO_MODE_KEY);

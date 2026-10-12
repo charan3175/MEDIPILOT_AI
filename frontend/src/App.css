@@ -5940,6 +5940,22 @@ button {
   margin: 15px auto 0;
 }
 
+.google-signin {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.google-signin > span {
+  color: #71829a;
+  font-size: 10px;
+}
+
+.google-signin-button {
+  min-height: 40px;
+}
+
 .auth-modal-safety {
   display: flex;
   align-items: flex-start;
