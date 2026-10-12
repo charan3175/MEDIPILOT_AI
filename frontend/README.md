@@ -1,5 +1,22 @@
 # React + Vite
 
+## Netlify deployment
+
+The repository-root `netlify.toml` configures Netlify to run
+`npm ci --include=dev && npm run build` in `frontend`, then publish
+`frontend/dist`. The explicit install uses the frontend lockfile and includes
+Vite and the other development dependencies required to build the site, even
+when the deployment environment has not installed them beforehand.
+It also rewrites application routes to `index.html` so direct links and page
+refreshes work with React Router.
+
+These settings override the previous Netlify UI base directory `frontnend`
+and build command `npm install`. The correct base directory is `frontend`;
+installing dependencies alone does not generate the production site.
+
+This configuration deploys the frontend only. The backend is not deployed by
+this configuration, and Vite's local `/api` proxy does not run in production.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:
